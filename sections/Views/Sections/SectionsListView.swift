@@ -26,13 +26,22 @@ struct SectionsListView: View {
     }
 
     var body: some View {
-        Group {
-            if sortedSections.isEmpty {
-                emptyState
-            } else {
-                sectionList
+        ZStack(alignment: .bottom) {
+            Group {
+                if sortedSections.isEmpty {
+                    emptyState
+                } else {
+                    sectionList
+                }
+            }
+
+            // Playback controls — slides up from bottom when a section is tapped
+            if playbackViewModel.activeSection != nil {
+                PlaybackControlsView(viewModel: playbackViewModel)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        .animation(.spring(duration: 0.35), value: playbackViewModel.activeSection?.id)
         .navigationTitle(audioFile.filename)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarContent }
@@ -96,6 +105,12 @@ struct SectionsListView: View {
                         }
                         .tint(.blue)
                     }
+            }
+            // Spacer so the last row isn't hidden behind the playback controls
+            if playbackViewModel.activeSection != nil {
+                Color.clear
+                    .frame(height: 180)
+                    .listRowBackground(Color.clear)
             }
         }
         .listStyle(.insetGrouped)

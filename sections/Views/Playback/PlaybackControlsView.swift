@@ -5,7 +5,7 @@ struct PlaybackControlsView: View {
 
     @ObservedObject var viewModel: PlaybackViewModel
 
-    private let speedOptions: [Float] = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
+    private let speedOptions: [Float] = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.5, 2.0]
 
     var body: some View {
         VStack(spacing: 12) {

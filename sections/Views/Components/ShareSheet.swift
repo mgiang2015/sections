@@ -1,14 +1,34 @@
-import SwiftUI
 import UIKit
+import SwiftUI
 
-/// Wraps UIActivityViewController for use in SwiftUI (share sheet).
-struct ShareSheet: UIViewControllerRepresentable {
+/// Presents a UIActivityViewController directly from the root view controller.
+/// This is more reliable than wrapping it in a SwiftUI .sheet on iOS 16+.
+enum ShareSheet {
 
-    let items: [Any]
+    static func present(items: [Any]) {
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let root = scene.windows.first?.rootViewController else { return }
 
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
+        // Walk up to the topmost presented controller so we don't present on a buried VC
+        var topVC = root
+        while let presented = topVC.presentedViewController {
+            topVC = presented
+        }
+
+        let controller = UIActivityViewController(activityItems: items, applicationActivities: nil)
+
+        // Required on iPad to avoid a crash
+        if let popover = controller.popoverPresentationController {
+            popover.sourceView = topVC.view
+            popover.sourceRect = CGRect(
+                x: topVC.view.bounds.midX,
+                y: topVC.view.bounds.midY,
+                width: 0,
+                height: 0
+            )
+            popover.permittedArrowDirections = []
+        }
+
+        topVC.present(controller, animated: true)
     }
-
-    func updateUIViewController(_ uvc: UIActivityViewController, context: Context) {}
 }
