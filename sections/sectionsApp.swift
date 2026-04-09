@@ -1,32 +1,13 @@
-//
-//  sectionsApp.swift
-//  sections
-//
-//  Created by Minh Giang Le on 9/4/26.
-//
-
 import SwiftUI
 import SwiftData
 
 @main
-struct sectionsApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Item.self,
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-
-        do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
-        } catch {
-            fatalError("Could not create ModelContainer: \(error)")
-        }
-    }()
+struct SectionsApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            AudioLibraryView()
+                .modelContainer(for: [AudioFile.self, AudioSection.self])
         }
-        .modelContainer(sharedModelContainer)
     }
 }
