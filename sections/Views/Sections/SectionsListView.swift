@@ -12,9 +12,7 @@ struct SectionsListView: View {
     @State private var sectionToEdit: AudioSection?
     @State private var sectionToDelete: AudioSection?
     @State private var showDeleteConfirmation = false
-    @State private var isExporting = false
     @State private var isImporting = false
-    @State private var exportURL: URL?
     @State private var importError: String?
     @State private var showImportError = false
 
@@ -63,12 +61,6 @@ struct SectionsListView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Are you sure you want to delete \"\(sectionToDelete?.name ?? "this section")\"?")
-        }
-        // JSON export share sheet
-        .sheet(isPresented: $isExporting) {
-            if let url = exportURL {
-                ShareSheet(items: [url])
-            }
         }
         // JSON import file picker
         .fileImporter(isPresented: $isImporting, allowedContentTypes: [.json]) { result in
@@ -157,8 +149,9 @@ struct SectionsListView: View {
 
     private func triggerExport() {
         do {
-            exportURL = try exportImportViewModel.exportSections(for: audioFile)
-            isExporting = true
+            let url = try exportImportViewModel.exportSections(for: audioFile)
+            // Present directly via UIKit — more reliable than SwiftUI .sheet for UIActivityViewController
+            ShareSheet.present(items: [url])
         } catch {
             importError = error.localizedDescription
             showImportError = true
