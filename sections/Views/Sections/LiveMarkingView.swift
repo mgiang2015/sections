@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Presented as a sheet from SectionFormView when the user taps "Mark Live".
+/// Presented as a sheet from SectionFormView when the user taps "Mark with Audio".
 /// Plays the full audio file and lets the user tap to set start and end timestamps.
 struct LiveMarkingView: View {
 
@@ -11,13 +11,7 @@ struct LiveMarkingView: View {
     var onConfirm: (TimeInterval, TimeInterval) -> Void
 
     @Environment(\.dismiss) private var dismiss
-
-    @State private var markedStart: TimeInterval? = nil
-    @State private var markedEnd: TimeInterval? = nil
-    @State private var markingStep: MarkingStep = .start
-    @State private var showConfirmError: String? = nil
-
-    enum MarkingStep { case start, end, done }
+    @StateObject private var markingVM = LiveMarkingViewModel()
 
     // MARK: - Body
 
@@ -48,12 +42,13 @@ struct LiveMarkingView: View {
                     .padding(.horizontal)
                     .padding(.bottom, 20)
             }
-            .navigationTitle("Mark Live")
+            .navigationTitle("Mark with Audio")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
                         playbackViewModel.stopAndReset()
+                        markingVM.reset()
                         dismiss()
                     }
                 }
@@ -61,7 +56,7 @@ struct LiveMarkingView: View {
                     Button("Use") {
                         confirmMarks()
                     }
-                    .disabled(markedStart == nil || markedEnd == nil)
+                    .disabled(!markingVM.canConfirm)
                     .fontWeight(.semibold)
                 }
             }
@@ -69,7 +64,6 @@ struct LiveMarkingView: View {
                 playbackViewModel.playFromBeginning(audioFile: audioFile)
             }
             .onDisappear {
-                // Safety net — stop audio if sheet is dismissed without tapping Cancel
                 if playbackViewModel.isPlaying {
                     playbackViewModel.stopAndReset()
                 }
@@ -87,9 +81,9 @@ struct LiveMarkingView: View {
                 .frame(width: 32)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(stepTitle)
+                Text(markingVM.stepTitle)
                     .font(.headline)
-                Text(stepSubtitle)
+                Text(markingVM.stepSubtitle)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -104,9 +98,9 @@ struct LiveMarkingView: View {
         HStack(spacing: 20) {
             timestampCard(
                 label: "Start",
-                time: markedStart,
+                time: markingVM.markedStart,
                 color: .green,
-                isActive: markingStep == .start
+                isActive: markingVM.step == .start
             )
 
             Image(systemName: "arrow.right")
@@ -115,9 +109,9 @@ struct LiveMarkingView: View {
 
             timestampCard(
                 label: "End",
-                time: markedEnd,
+                time: markingVM.markedEnd,
                 color: .blue,
-                isActive: markingStep == .end
+                isActive: markingVM.step == .end
             )
         }
     }
@@ -144,7 +138,6 @@ struct LiveMarkingView: View {
 
     private var progressSection: some View {
         VStack(spacing: 6) {
-            // Tappable progress bar for scrubbing
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule()
@@ -155,13 +148,11 @@ struct LiveMarkingView: View {
                         .fill(Color.blue)
                         .frame(width: geo.size.width * playbackViewModel.progress, height: 6)
 
-                    // Start marker
-                    if let start = markedStart, playbackViewModel.duration > 0 {
+                    if let start = markingVM.markedStart, playbackViewModel.duration > 0 {
                         markerLine(at: start / playbackViewModel.duration, in: geo.size.width, color: .green)
                     }
 
-                    // End marker
-                    if let end = markedEnd, playbackViewModel.duration > 0 {
+                    if let end = markingVM.markedEnd, playbackViewModel.duration > 0 {
                         markerLine(at: end / playbackViewModel.duration, in: geo.size.width, color: .blue)
                     }
                 }
@@ -196,37 +187,33 @@ struct LiveMarkingView: View {
     }
 
     private var markButton: some View {
-        Button {
-            markCurrentTime()
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: markingStep == .start ? "flag.fill" : "flag.checkered")
-                Text(markingStep == .start ? "Mark Start" : markingStep == .end ? "Mark End" : "Re-mark Start")
-                    .fontWeight(.semibold)
+        VStack(spacing: 8) {
+            Button {
+                markingVM.mark(at: playbackViewModel.currentTime)
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: markingVM.step == .start ? "flag.fill" : "flag.checkered")
+                    Text(markingVM.markButtonLabel)
+                        .fontWeight(.semibold)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(markButtonColor)
+                .foregroundStyle(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(markButtonColor)
-            .foregroundStyle(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
-        }
-        .buttonStyle(.plain)
+            .buttonStyle(.plain)
 
-        // Inline error (e.g. end before start)
-        .overlay(alignment: .bottom) {
-            if let err = showConfirmError {
+            if let err = markingVM.markError {
                 Text(err)
                     .font(.caption)
                     .foregroundStyle(.red)
-                    .offset(y: 20)
             }
         }
-        .padding(.bottom, showConfirmError != nil ? 12 : 0)
     }
 
     private var transportRow: some View {
         HStack(spacing: 40) {
-            // Skip back 5s
             Button {
                 playbackViewModel.seek(to: playbackViewModel.currentTime - 5)
             } label: {
@@ -234,7 +221,6 @@ struct LiveMarkingView: View {
                     .font(.title2)
             }
 
-            // Play / Pause
             Button {
                 playbackViewModel.togglePlayPause()
             } label: {
@@ -243,7 +229,6 @@ struct LiveMarkingView: View {
                     .foregroundStyle(.blue)
             }
 
-            // Skip forward 5s
             Button {
                 playbackViewModel.seek(to: playbackViewModel.currentTime + 5)
             } label: {
@@ -257,7 +242,7 @@ struct LiveMarkingView: View {
     // MARK: - Step display helpers
 
     private var stepIcon: String {
-        switch markingStep {
+        switch markingVM.step {
         case .start: return "flag.fill"
         case .end:   return "flag.checkered"
         case .done:  return "checkmark.circle.fill"
@@ -265,71 +250,25 @@ struct LiveMarkingView: View {
     }
 
     private var stepColor: Color {
-        switch markingStep {
+        switch markingVM.step {
         case .start: return .green
         case .end:   return .blue
         case .done:  return .purple
         }
     }
 
-    private var stepTitle: String {
-        switch markingStep {
-        case .start: return "Step 1 — Mark Start"
-        case .end:   return "Step 2 — Mark End"
-        case .done:  return "Both timestamps marked"
-        }
-    }
-
-    private var stepSubtitle: String {
-        switch markingStep {
-        case .start: return "Play the audio and tap Mark Start at the right moment"
-        case .end:   return "Continue playing and tap Mark End when the section finishes"
-        case .done:  return "Tap Use to apply, or tap Mark Start again to redo"
-        }
-    }
-
     private var markButtonColor: Color {
-        switch markingStep {
+        switch markingVM.step {
         case .start: return .green
         case .end:   return .blue
-        case .done:  return .green  // re-mark start
+        case .done:  return .green
         }
     }
 
     // MARK: - Logic
 
-    private func markCurrentTime() {
-        showConfirmError = nil
-        let now = playbackViewModel.currentTime
-
-        switch markingStep {
-        case .start:
-            markedStart = now
-            markedEnd = nil      // clear end whenever start is re-marked
-            markingStep = .end
-
-        case .end:
-            guard let start = markedStart, now > start else {
-                showConfirmError = "End must be after start. Keep playing and try again."
-                return
-            }
-            markedEnd = now
-            markingStep = .done
-
-        case .done:
-            // Allow redo — reset back to start
-            markedStart = nil
-            markedEnd = nil
-            markingStep = .start
-        }
-    }
-
     private func confirmMarks() {
-        guard let start = markedStart, let end = markedEnd else { return }
-        guard end > start else {
-            showConfirmError = "End must be after start."
-            return
-        }
+        guard let (start, end) = markingVM.confirm() else { return }
         playbackViewModel.stopAndReset()
         onConfirm(start, end)
         dismiss()

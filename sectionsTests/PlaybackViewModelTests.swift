@@ -128,4 +128,70 @@ final class PlaybackViewModelTests: XCTestCase {
         // This test documents current behaviour so regressions are caught
         _ = sut.activeSection  // just access — main assertion is no crash
     }
+
+    // MARK: - Live marking: currentTime (no player)
+
+    func test_currentTime_withNoPlayer_isZero() {
+        XCTAssertEqual(sut.currentTime, 0)
+    }
+
+    // MARK: - Live marking: duration (no player)
+
+    func test_duration_withNoPlayer_isZero() {
+        XCTAssertEqual(sut.duration, 0)
+    }
+
+    // MARK: - Live marking: seek (no player)
+
+    func test_seek_withNoPlayer_doesNotCrash() {
+        sut.seek(to: 30.0)
+        // No player loaded — should be a silent no-op
+        XCTAssertEqual(sut.currentTime, 0)
+    }
+
+    func test_seek_negativeValue_doesNotCrash() {
+        sut.seek(to: -10.0)
+        XCTAssertEqual(sut.currentTime, 0)
+    }
+
+    // MARK: - Live marking: stopAndReset
+
+    func test_stopAndReset_setsIsPlayingFalse() {
+        sut.isPlaying = true
+        sut.stopAndReset()
+        XCTAssertFalse(sut.isPlaying)
+    }
+
+    func test_stopAndReset_clearsActiveSection() {
+        sut.activeSection = AudioSection(name: "Test", startTime: 0, endTime: 30)
+        sut.stopAndReset()
+        XCTAssertNil(sut.activeSection)
+    }
+
+    func test_stopAndReset_resetsProgressToZero() {
+        sut.progress = 0.75
+        sut.stopAndReset()
+        XCTAssertEqual(sut.progress, 0)
+    }
+
+    func test_stopAndReset_calledTwice_doesNotCrash() {
+        sut.stopAndReset()
+        sut.stopAndReset()
+        XCTAssertFalse(sut.isPlaying)
+    }
+
+    // MARK: - Live marking: playFromBeginning (missing file)
+
+    func test_playFromBeginning_withMissingFile_doesNotSetIsPlaying() {
+        let file = AudioFile(filename: "ghost.mp3", localPath: "ghost.mp3")
+        sut.playFromBeginning(audioFile: file)
+        XCTAssertFalse(sut.isPlaying)
+    }
+
+    func test_playFromBeginning_withMissingFile_doesNotCrash() {
+        let file = AudioFile(filename: "ghost.mp3", localPath: "ghost.mp3")
+        // Should catch the AVAudioPlayer init error silently
+        sut.playFromBeginning(audioFile: file)
+        XCTAssertEqual(sut.currentTime, 0)
+    }
 }
