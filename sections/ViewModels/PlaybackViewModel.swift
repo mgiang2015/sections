@@ -134,3 +134,64 @@ final class PlaybackViewModel: ObservableObject {
         }
     }
 }
+
+// MARK: - Live Marking Support (post-MVP feature)
+extension PlaybackViewModel {
+
+    /// Current playback position in seconds. Updated every 0.1s by the existing timer.
+    /// Used by LiveMarkingView to display a real-time timestamp.
+    var currentTime: TimeInterval {
+        player?.currentTime ?? 0
+    }
+
+    /// Total duration of the loaded audio file in seconds.
+    var duration: TimeInterval {
+        player?.duration ?? 0
+    }
+
+    /// Starts playback from the beginning of the file (no section bounds).
+    /// Used in live-marking mode so the user can scrub the whole file freely.
+    func playFromBeginning(audioFile: AudioFile) {
+        stopTimer()
+        do {
+            if player?.url != audioFile.resolvedURL {
+                player = try AVAudioPlayer(contentsOf: audioFile.resolvedURL)
+                player?.enableRate = true
+            }
+            guard let player else { return }
+            player.currentTime = 0
+            player.rate = playbackRate
+            player.play()
+            isPlaying = true
+            // Run a free-running timer (no section-end check needed in marking mode)
+            startFreeTimer()
+        } catch {
+            print("AVAudioPlayer error: \(error)")
+        }
+    }
+
+    /// Seeks to an absolute position in the file.
+    func seek(to time: TimeInterval) {
+        player?.currentTime = max(0, min(time, duration))
+    }
+
+    /// Stops all playback and resets state. Called when live-marking sheet is dismissed.
+    func stopAndReset() {
+        player?.stop()
+        isPlaying = false
+        activeSection = nil
+        progress = 0
+        stopTimer()
+    }
+
+    private func startFreeTimer() {
+        progressTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, let player = self.player else { return }
+                self.progress = self.duration > 0 ? player.currentTime / self.duration : 0
+                // Publish currentTime changes by triggering objectWillChange
+                self.objectWillChange.send()
+            }
+        }
+    }
+}

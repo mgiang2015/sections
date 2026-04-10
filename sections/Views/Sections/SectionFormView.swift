@@ -1,8 +1,10 @@
 import SwiftUI
+import AVFoundation
 import SwiftData
 
 /// Modal form for creating or editing an AudioSection.
 /// Pass `existingSection: nil` to create a new one.
+/// Pass `playbackViewModel` to enable live tap-to-mark timestamps.
 struct SectionFormView: View {
 
     @Environment(\.modelContext) private var modelContext
@@ -11,6 +13,10 @@ struct SectionFormView: View {
     let audioFile: AudioFile
     var existingSection: AudioSection?
 
+    /// Shared playback engine from SectionsListView.
+    /// When provided, the "Mark Live" button is enabled.
+    var playbackViewModel: PlaybackViewModel? = nil
+
     // MARK: - Form State
 
     @State private var name: String = ""
@@ -18,13 +24,10 @@ struct SectionFormView: View {
     @State private var endTimeText: String = "0:00"
     @State private var playbackMode: PlaybackMode = .loop
     @State private var validationError: String?
+    @State private var showLiveMarking = false
+    @State private var audioDuration: TimeInterval = 15 * 60   // updated onAppear
 
     private var isEditing: Bool { existingSection != nil }
-    private var audioDuration: TimeInterval {
-        // TODO: In Sprint 5, inject real duration from AVFoundation
-        // Placeholder: 15 minutes max per BRD
-        15 * 60
-    }
 
     var body: some View {
         NavigationStack {
@@ -34,7 +37,22 @@ struct SectionFormView: View {
                         .autocorrectionDisabled()
                 }
 
-                SwiftUI.Section("Timestamps") {
+                SwiftUI.Section {
+                    // Live marking button — only shown when a player is available
+                    if playbackViewModel != nil {
+                        Button {
+                            showLiveMarking = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "record.circle")
+                                    .foregroundStyle(.red)
+                                Text("Mark with Audio")
+                                    .foregroundStyle(.primary)
+                            }
+                        }
+                    }
+                    
+                    // Manual timestamp fields
                     HStack {
                         Text("Start")
                             .frame(width: 50, alignment: .leading)
@@ -49,9 +67,11 @@ struct SectionFormView: View {
                             .keyboardType(.numbersAndPunctuation)
                             .multilineTextAlignment(.trailing)
                     }
-                    Text("Format: mm:ss  (e.g. 1:30 for 1 minute 30 seconds)")
+                    Text("Format: mm:ss  (e.g. 1:30)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                } header: {
+                    Text("Timestamps")
                 }
 
                 SwiftUI.Section("Playback") {
@@ -82,7 +102,23 @@ struct SectionFormView: View {
                         .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
-            .onAppear { populateIfEditing() }
+            .onAppear {
+                populateIfEditing()
+                loadAudioDuration()
+            }
+            // Live marking sheet
+            .sheet(isPresented: $showLiveMarking) {
+                if let vm = playbackViewModel {
+                    LiveMarkingView(
+                        playbackViewModel: vm,
+                        audioFile: audioFile
+                    ) { start, end in
+                        // Callback: apply marked timestamps to the form fields
+                        startTimeText = TimeFormatter.format(start)
+                        endTimeText   = TimeFormatter.format(end)
+                    }
+                }
+            }
         }
     }
 
@@ -90,27 +126,35 @@ struct SectionFormView: View {
 
     private func populateIfEditing() {
         guard let section = existingSection else { return }
-        name = section.name
+        name          = section.name
         startTimeText = TimeFormatter.format(section.startTime)
         endTimeText   = TimeFormatter.format(section.endTime)
         playbackMode  = section.playbackMode
+    }
+
+    private func loadAudioDuration() {
+        Task {
+            if let duration = await AudioFileService.duration(of: audioFile.resolvedURL) {
+                audioDuration = duration
+            }
+        }
     }
 
     private func save() {
         guard let (start, end) = validate() else { return }
 
         if let section = existingSection {
-            // Edit existing
-            section.name = name.trimmingCharacters(in: .whitespaces)
-            section.startTime = start
-            section.endTime = end
+            section.name         = name.trimmingCharacters(in: .whitespaces)
+            section.startTime    = start
+            section.endTime      = end
             section.playbackMode = playbackMode
         } else {
-            // Create new
-            let newSection = AudioSection(name: name.trimmingCharacters(in: .whitespaces),
-                                     startTime: start,
-                                     endTime: end,
-                                     playbackMode: playbackMode)
+            let newSection = AudioSection(
+                name: name.trimmingCharacters(in: .whitespaces),
+                startTime: start,
+                endTime: end,
+                playbackMode: playbackMode
+            )
             newSection.audioFile = audioFile
             modelContext.insert(newSection)
         }
@@ -118,7 +162,6 @@ struct SectionFormView: View {
         dismiss()
     }
 
-    /// Returns (startTime, endTime) in seconds if valid, or sets validationError and returns nil.
     private func validate() -> (TimeInterval, TimeInterval)? {
         guard !name.trimmingCharacters(in: .whitespaces).isEmpty else {
             validationError = "Name cannot be empty."

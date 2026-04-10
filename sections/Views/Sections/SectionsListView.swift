@@ -45,11 +45,11 @@ struct SectionsListView: View {
         .toolbar { toolbarContent }
         // Create section sheet
         .sheet(isPresented: $showCreateSheet) {
-            SectionFormView(audioFile: audioFile, existingSection: nil)
+            SectionFormView(audioFile: audioFile, existingSection: nil, playbackViewModel: playbackViewModel)
         }
         // Edit section sheet
         .sheet(item: $sectionToEdit) { section in
-            SectionFormView(audioFile: audioFile, existingSection: section)
+            SectionFormView(audioFile: audioFile, existingSection: section, playbackViewModel: playbackViewModel)
         }
         // Delete confirmation
         .confirmationDialog("Delete Section", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
