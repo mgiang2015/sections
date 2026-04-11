@@ -2,19 +2,25 @@ import SwiftUI
 import SwiftData
 internal import UniformTypeIdentifiers
 
-/// Home screen — lists all imported audio files, sorted by date added (newest first).
+/// Home screen — lists all imported audio files with user-selectable sort order.
 struct AudioLibraryView: View {
 
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \AudioFile.dateAdded, order: .reverse) private var audioFiles: [AudioFile]
+    // Fetch all files unsorted — sorting is done in-memory so the order can be
+    // changed at runtime without re-querying SwiftData.
+    @Query private var audioFiles: [AudioFile]
 
+    @State private var sortOrder: LibrarySortOrder = .recentlyAdded
     @State private var isImporting = false
     @State private var fileToDelete: AudioFile?
     @State private var showDeleteConfirmation = false
     @State private var importError: String?
     @State private var showImportError = false
-
     @State private var viewModel = AudioLibraryViewModel()
+
+    private var sortedFiles: [AudioFile] {
+        sortOrder.sort(audioFiles)
+    }
 
     var body: some View {
         NavigationStack {
@@ -26,16 +32,7 @@ struct AudioLibraryView: View {
                 }
             }
             .navigationTitle("Sections")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        isImporting = true
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .accessibilityLabel("Import audio file")
-                }
-            }
+            .toolbar { toolbarContent }
             .fileImporter(
                 isPresented: $isImporting,
                 allowedContentTypes: AudioLibraryViewModel.supportedContentTypes,
@@ -69,19 +66,20 @@ struct AudioLibraryView: View {
 
     private var fileList: some View {
         List {
-            ForEach(audioFiles) { file in
+            ForEach(sortedFiles) { file in
                 NavigationLink(destination: SectionsListView(audioFile: file)) {
                     AudioFileRowView(audioFile: file)
                 }
             }
             .onDelete { indexSet in
                 if let index = indexSet.first {
-                    fileToDelete = audioFiles[index]
+                    fileToDelete = sortedFiles[index]
                     showDeleteConfirmation = true
                 }
             }
         }
         .listStyle(.insetGrouped)
+        .animation(.default, value: sortOrder)
     }
 
     private var emptyState: some View {
@@ -96,12 +94,41 @@ struct AudioLibraryView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Button("Import Audio") {
-                isImporting = true
-            }
-            .buttonStyle(.borderedProminent)
+            Button("Import Audio") { isImporting = true }
+                .buttonStyle(.borderedProminent)
         }
         .padding()
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        // Sort menu — left side
+        ToolbarItem(placement: .navigationBarLeading) {
+            Menu {
+                Picker("Sort by", selection: $sortOrder) {
+                    ForEach(LibrarySortOrder.allCases) { order in
+                        Label(order.displayName, systemImage: order.systemImage)
+                            .tag(order)
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(sortOrder.displayName)
+                        .font(.subheadline)
+                    Image(systemName: "chevron.down")
+                        .font(.caption2)
+                }
+                .foregroundStyle(.blue)
+            }
+            .accessibilityLabel("Sort order: \(sortOrder.displayName)")
+        }
+        // Import button — right side
+        ToolbarItem(placement: .navigationBarTrailing) {
+            Button { isImporting = true } label: {
+                Image(systemName: "plus")
+            }
+            .accessibilityLabel("Import audio file")
+        }
     }
 
     // MARK: - Helpers

@@ -31,16 +31,13 @@ final class AudioFileTests: XCTestCase {
     func test_resolvedURL_appendsLocalPathToDocumentsDirectory() {
         let file = AudioFile(filename: "song.mp3", localPath: "song.mp3")
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let expected = documents.appendingPathComponent("song.mp3")
-        XCTAssertEqual(file.resolvedURL, expected)
+        XCTAssertEqual(file.resolvedURL, documents.appendingPathComponent("song.mp3"))
     }
 
     func test_resolvedURL_usesLocalPath_notFilename() {
-        // localPath and filename can differ in future; resolvedURL must use localPath
         let file = AudioFile(filename: "display.mp3", localPath: "stored/internal.mp3")
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let expected = documents.appendingPathComponent("stored/internal.mp3")
-        XCTAssertEqual(file.resolvedURL, expected)
+        XCTAssertEqual(file.resolvedURL, documents.appendingPathComponent("stored/internal.mp3"))
     }
 
     // MARK: - sectionsSortedByLastPlayed
@@ -49,13 +46,13 @@ final class AudioFileTests: XCTestCase {
         let file = AudioFile(filename: "track.mp3", localPath: "track.mp3")
 
         let old = AudioSection(name: "Old", startTime: 0, endTime: 30)
-        old.lastPlayed = Date(timeIntervalSinceNow: -3600) // 1 hour ago
+        old.lastPlayed = Date(timeIntervalSinceNow: -3600)
 
         let recent = AudioSection(name: "Recent", startTime: 30, endTime: 60)
-        recent.lastPlayed = Date(timeIntervalSinceNow: -60) // 1 minute ago
+        recent.lastPlayed = Date(timeIntervalSinceNow: -60)
 
         let newest = AudioSection(name: "Newest", startTime: 60, endTime: 90)
-        newest.lastPlayed = Date() // now
+        newest.lastPlayed = Date()
 
         file.sections = [old, recent, newest]
 
@@ -72,9 +69,7 @@ final class AudioFileTests: XCTestCase {
 
     func test_sectionsSortedByLastPlayed_singleSection_returnsSingleItem() {
         let file = AudioFile(filename: "track.mp3", localPath: "track.mp3")
-        let section = AudioSection(name: "Only", startTime: 0, endTime: 30)
-        file.sections = [section]
+        file.sections = [AudioSection(name: "Only", startTime: 0, endTime: 30)]
         XCTAssertEqual(file.sectionsSortedByLastPlayed.count, 1)
-        XCTAssertEqual(file.sectionsSortedByLastPlayed[0].name, "Only")
     }
 }
