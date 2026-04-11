@@ -63,9 +63,9 @@ final class AudioLibraryViewModel {
         let destination = documents.appendingPathComponent(filename)
 
         do {
-            if FileManager.default.fileExists(atPath: destination.path) {
-                try FileManager.default.removeItem(at: destination)
-            }
+            // Always attempt removal first — silently ignored if file doesn't exist.
+            // This also handles case-insensitive filesystem collisions (e.g. track.MP3 vs track.mp3).
+            try? FileManager.default.removeItem(at: destination)
             try FileManager.default.copyItem(at: url, to: destination)
         } catch {
             throw AudioImportError.copyFailed(error)
