@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 internal import UniformTypeIdentifiers
 
-/// Home screen — lists all imported MP3 audio files, sorted by date added (newest first).
+/// Home screen — lists all imported audio files, sorted by date added (newest first).
 struct AudioLibraryView: View {
 
     @Environment(\.modelContext) private var modelContext
@@ -14,7 +14,6 @@ struct AudioLibraryView: View {
     @State private var importError: String?
     @State private var showImportError = false
 
-    // ViewModel handles file import logic
     @State private var viewModel = AudioLibraryViewModel()
 
     var body: some View {
@@ -37,10 +36,9 @@ struct AudioLibraryView: View {
                     .accessibilityLabel("Import audio file")
                 }
             }
-            // MP3 file picker
             .fileImporter(
                 isPresented: $isImporting,
-                allowedContentTypes: [.mp3],
+                allowedContentTypes: AudioLibraryViewModel.supportedContentTypes,
                 allowsMultipleSelection: false
             ) { result in
                 handleImportResult(result)
@@ -94,11 +92,11 @@ struct AudioLibraryView: View {
             Text("No Audio Files")
                 .font(.title2)
                 .fontWeight(.semibold)
-            Text("Tap + to import an MP3 from your Files app.")
+            Text("Tap + to import an MP3, WAV, or M4A file.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Button("Import MP3") {
+            Button("Import Audio") {
                 isImporting = true
             }
             .buttonStyle(.borderedProminent)

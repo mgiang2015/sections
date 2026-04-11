@@ -1,15 +1,31 @@
 import Foundation
 import SwiftData
+internal import UniformTypeIdentifiers
+
+// MARK: - Supported formats
+
+extension AudioLibraryViewModel {
+    /// File extensions accepted by the app, lowercased.
+    static let supportedExtensions: Set<String> = ["mp3", "wav", "m4a"]
+
+    /// UTTypes for the Files app document picker.
+    static let supportedContentTypes: [UTType] = [.mp3, .wav, .mpeg4Audio]
+}
+
+// MARK: - Error
 
 enum AudioImportError: LocalizedError {
-    case notMP3
+    case unsupportedFormat(String)
     case duplicateFilename(String)
     case copyFailed(Error)
 
     var errorDescription: String? {
         switch self {
-        case .notMP3:
-            return "Only MP3 files are supported. Please choose an .mp3 file."
+        case .unsupportedFormat(let ext):
+            let supported = AudioLibraryViewModel.supportedExtensions
+                .sorted()
+                .joined(separator: ", ")
+            return "\"\(ext)\" is not supported. Please choose an \(supported) file."
         case .duplicateFilename(let name):
             return "A file named \"\(name)\" already exists in your library."
         case .copyFailed(let underlying):
@@ -17,6 +33,8 @@ enum AudioImportError: LocalizedError {
         }
     }
 }
+
+// MARK: - ViewModel
 
 final class AudioLibraryViewModel {
 
@@ -26,19 +44,18 @@ final class AudioLibraryViewModel {
     /// Throws `AudioImportError` on validation or copy failure.
     @MainActor
     func importAudioFile(from url: URL, existingFiles: [AudioFile], context: ModelContext) throws {
-        // Validate extension
-        guard url.pathExtension.lowercased() == "mp3" else {
-            throw AudioImportError.notMP3
+        let ext = url.pathExtension.lowercased()
+
+        guard AudioLibraryViewModel.supportedExtensions.contains(ext) else {
+            throw AudioImportError.unsupportedFormat(ext)
         }
 
         let filename = url.lastPathComponent
 
-        // Duplicate check — prompt handled at the call site; here we throw for simplicity
         if existingFiles.contains(where: { $0.filename == filename }) {
             throw AudioImportError.duplicateFilename(filename)
         }
 
-        // Security-scoped access for Files app URLs
         let didStart = url.startAccessingSecurityScopedResource()
         defer { if didStart { url.stopAccessingSecurityScopedResource() } }
 
@@ -63,7 +80,6 @@ final class AudioLibraryViewModel {
     /// Removes the audio file from the sandbox and deletes the SwiftData record (cascade deletes sections).
     @MainActor
     func deleteAudioFile(_ file: AudioFile, context: ModelContext) {
-        // Remove from sandbox
         try? FileManager.default.removeItem(at: file.resolvedURL)
         context.delete(file)
     }
