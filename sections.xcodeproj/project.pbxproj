@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		D556D2902F8B31A80086873B /* privacy-policy.md in Resources */ = {isa = PBXBuildFile; fileRef = D556D28E2F8B31A80086873B /* privacy-policy.md */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		D59DE9762F872785005C44A0 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -24,6 +28,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		D556D28E2F8B31A80086873B /* privacy-policy.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "privacy-policy.md"; sourceTree = "<group>"; };
 		D59DE9662F872784005C44A0 /* sections.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = sections.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D59DE9752F872785005C44A0 /* sectionsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = sectionsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D59DE97F2F872785005C44A0 /* sectionsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = sectionsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -75,6 +80,7 @@
 		D59DE95D2F872784005C44A0 = {
 			isa = PBXGroup;
 			children = (
+				D556D28E2F8B31A80086873B /* privacy-policy.md */,
 				D59DE9682F872784005C44A0 /* sections */,
 				D59DE9782F872785005C44A0 /* sectionsTests */,
 				D59DE9822F872785005C44A0 /* sectionsUITests */,
@@ -212,6 +218,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D556D2902F8B31A80086873B /* privacy-policy.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
