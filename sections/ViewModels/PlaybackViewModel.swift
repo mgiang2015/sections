@@ -152,15 +152,18 @@ final class PlaybackViewModel: NSObject, ObservableObject {
             object: AVAudioSession.sharedInstance(),
             queue: .main
         ) { [weak self] notification in
+            // Extract only the Sendable UInt values we need before crossing
+            // the Task boundary — neither Notification nor [AnyHashable: Any] is Sendable.
+            let typeValue = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+            let optionsValue = notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt
             Task { @MainActor [weak self] in
-                self?.handleInterruption(notification)
+                self?.handleInterruption(typeValue: typeValue, optionsValue: optionsValue)
             }
         }
     }
 
-    private func handleInterruption(_ notification: Notification) {
-        guard let userInfo = notification.userInfo,
-              let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+    private func handleInterruption(typeValue: UInt?, optionsValue: UInt?) {
+        guard let typeValue,
               let type = AVAudioSession.InterruptionType(rawValue: typeValue)
         else { return }
 
@@ -175,8 +178,7 @@ final class PlaybackViewModel: NSObject, ObservableObject {
 
         case .ended:
             // Interruption ended — resume if appropriate
-            let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
-            let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
+            let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue ?? 0)
             if options.contains(.shouldResume) {
                 AudioSessionManager.shared.reactivate()
                 player?.play()
