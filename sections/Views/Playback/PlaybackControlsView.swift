@@ -37,15 +37,15 @@ struct PlaybackControlsView: View {
                 .tint(.blue)
 
             // Transport controls
-            HStack(spacing: 32) {
-                // Replay
+            HStack(spacing: 36) {
+                // Skip back 5s
                 Button {
-                    viewModel.replay()
+                    viewModel.seekWithinSection(by: -5)
                 } label: {
-                    Image(systemName: "arrow.counterclockwise")
+                    Image(systemName: "gobackward.5")
                         .font(.title2)
                 }
-                .accessibilityLabel("Replay section")
+                .accessibilityLabel("Skip back 5 seconds")
 
                 // Play / Pause
                 Button {
@@ -57,8 +57,14 @@ struct PlaybackControlsView: View {
                 }
                 .accessibilityLabel(viewModel.isPlaying ? "Pause" : "Play")
 
-                // Placeholder for future control symmetry
-                Spacer().frame(width: 28)
+                // Skip forward 5s
+                Button {
+                    viewModel.seekWithinSection(by: 5)
+                } label: {
+                    Image(systemName: "goforward.5")
+                        .font(.title2)
+                }
+                .accessibilityLabel("Skip forward 5 seconds")
             }
             .frame(maxWidth: .infinity)
 

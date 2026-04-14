@@ -102,6 +102,14 @@ final class PlaybackViewModel: NSObject, ObservableObject {
         }
     }
 
+    /// Seeks forward or backward within the active section by the given number of seconds.
+    /// Clamps to [sectionStartTime, sectionEndTime] so seeking never leaves the section.
+    func seekWithinSection(by seconds: TimeInterval) {
+        guard let player else { return }
+        let target = max(sectionStartTime, min(sectionEndTime, player.currentTime + seconds))
+        player.currentTime = target
+    }
+
     func togglePlaybackMode() {
         currentPlaybackMode = currentPlaybackMode == .loop ? .playOnce : .loop
         activeSection?.playbackMode = currentPlaybackMode
