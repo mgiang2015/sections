@@ -67,6 +67,7 @@ final class PlaybackViewModel: NSObject, ObservableObject {
             player.play()
             isPlaying = true
             section.lastPlayed = Date()
+            ReviewManager.shared.recordSectionPlay()
 
             startSectionTimer()
         } catch {
