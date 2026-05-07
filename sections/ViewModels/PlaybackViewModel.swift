@@ -5,7 +5,6 @@ import SwiftData
 
 /// Manages all audio playback state using AVFoundation.
 /// Supports background audio playback — audio continues when the app is backgrounded.
-/// Uses AVAudioPlayerDelegate for section-end detection so looping works with the screen off.
 @MainActor
 final class PlaybackViewModel: NSObject, ObservableObject {
 
@@ -25,8 +24,6 @@ final class PlaybackViewModel: NSObject, ObservableObject {
     private var sectionStartTime: TimeInterval = 0
     private var sectionEndTime: TimeInterval = 0
     private var progressTimer: Timer?
-
-    // Interruption observer (phone calls, Siri, alarms)
     private var interruptionObserver: NSObjectProtocol?
 
     // MARK: - Init / Deinit
@@ -44,7 +41,6 @@ final class PlaybackViewModel: NSObject, ObservableObject {
 
     // MARK: - Public API
 
-    /// Begin playing a section from its startTime.
     func play(section: AudioSection, from audioFile: AudioFile) {
         stopTimer()
 
@@ -61,19 +57,18 @@ final class PlaybackViewModel: NSObject, ObservableObject {
             sectionStartTime = section.startTime
             sectionEndTime   = section.endTime
 
-            // Set numberOfLoops = -1 for infinite loop, 0 for play-once.
-            // AVAudioPlayer handles looping natively — no timer needed for the loop itself.
-            // This means looping continues even when the app is backgrounded.
-            player.numberOfLoops = section.playbackMode == .loop ? -1 : 0
+            // numberOfLoops = -1 loops the ENTIRE FILE, not a section.
+            // Section boundary enforcement must be done via the timer tick.
+            // Set to 0 so the file plays through and the delegate fires if
+            // the timer somehow misses the end (belt-and-suspenders).
+            player.numberOfLoops = 0
             player.currentTime = section.startTime
             player.rate = playbackRate
             player.play()
             isPlaying = true
             section.lastPlayed = Date()
 
-            // Timer is only used for UI progress bar updates.
-            // Section-end detection for .playOnce is handled by AVAudioPlayerDelegate.
-            startProgressTimer()
+            startSectionTimer()
         } catch {
             print("AVAudioPlayer error: \(error)")
         }
@@ -88,7 +83,7 @@ final class PlaybackViewModel: NSObject, ObservableObject {
         } else {
             player.play()
             isPlaying = true
-            startProgressTimer()
+            startSectionTimer()
         }
     }
 
@@ -98,12 +93,10 @@ final class PlaybackViewModel: NSObject, ObservableObject {
         if !isPlaying {
             player.play()
             isPlaying = true
-            startProgressTimer()
+            startSectionTimer()
         }
     }
 
-    /// Seeks forward or backward within the active section by the given number of seconds.
-    /// Clamps to [sectionStartTime, sectionEndTime] so seeking never leaves the section.
     func seekWithinSection(by seconds: TimeInterval) {
         guard let player else { return }
         let target = max(sectionStartTime, min(sectionEndTime, player.currentTime + seconds))
@@ -113,8 +106,6 @@ final class PlaybackViewModel: NSObject, ObservableObject {
     func togglePlaybackMode() {
         currentPlaybackMode = currentPlaybackMode == .loop ? .playOnce : .loop
         activeSection?.playbackMode = currentPlaybackMode
-        // Update numberOfLoops on the live player so the change takes effect immediately
-        player?.numberOfLoops = currentPlaybackMode == .loop ? -1 : 0
     }
 
     // MARK: - Private Helpers
@@ -123,13 +114,18 @@ final class PlaybackViewModel: NSObject, ObservableObject {
         player?.rate = playbackRate
     }
 
-    private func startProgressTimer() {
-        // Timer fires every 0.1s to update the UI progress bar only.
-        // Using .common RunLoop mode so it fires while UI is tracking touches.
-        // Background looping does NOT depend on this timer.
-        let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+    /// Starts the section timer.
+    /// Fires at 50ms intervals — handles both progress bar updates AND section boundary
+    /// enforcement (loop / stop at sectionEndTime).
+    /// Uses .common RunLoop mode so it fires during touch tracking and UI animation.
+    /// NOTE: When the app is backgrounded the main RunLoop is suspended, so the timer
+    /// will not fire. However AVAudioSession's .playback category keeps the audio thread
+    /// alive, so audio continues — the timer simply resumes when the app foregrounds.
+    /// The section boundary is enforced immediately on the next tick after foregrounding.
+    private func startSectionTimer() {
+        let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.tickProgress()
+                self?.tick()
             }
         }
         RunLoop.main.add(timer, forMode: .common)
@@ -141,14 +137,32 @@ final class PlaybackViewModel: NSObject, ObservableObject {
         progressTimer = nil
     }
 
-    private func tickProgress() {
+    private func tick() {
         guard let player, isPlaying else { return }
 
         let current = player.currentTime
         let sectionDuration = sectionEndTime - sectionStartTime
 
+        // Update progress bar
         if sectionDuration > 0 {
             progress = max(0, min(1, (current - sectionStartTime) / sectionDuration))
+        }
+
+        // Section boundary enforcement
+        if current >= sectionEndTime {
+            switch currentPlaybackMode {
+            case .loop:
+                player.currentTime = sectionStartTime
+                // Re-call play() to ensure the player is still running after the seek
+                if !player.isPlaying { player.play() }
+
+            case .playOnce:
+                player.pause()
+                player.currentTime = sectionStartTime
+                isPlaying = false
+                progress = 0
+                stopTimer()
+            }
         }
     }
 
@@ -160,8 +174,6 @@ final class PlaybackViewModel: NSObject, ObservableObject {
             object: AVAudioSession.sharedInstance(),
             queue: .main
         ) { [weak self] notification in
-            // Extract only the Sendable UInt values we need before crossing
-            // the Task boundary — neither Notification nor [AnyHashable: Any] is Sendable.
             let typeValue = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
             let optionsValue = notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt
             Task { @MainActor [weak self] in
@@ -177,7 +189,6 @@ final class PlaybackViewModel: NSObject, ObservableObject {
 
         switch type {
         case .began:
-            // Phone call, Siri, alarm started — pause playback
             if isPlaying {
                 player?.pause()
                 isPlaying = false
@@ -185,13 +196,12 @@ final class PlaybackViewModel: NSObject, ObservableObject {
             }
 
         case .ended:
-            // Interruption ended — resume if appropriate
             let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue ?? 0)
             if options.contains(.shouldResume) {
                 AudioSessionManager.shared.reactivate()
                 player?.play()
                 isPlaying = true
-                startProgressTimer()
+                startSectionTimer()
             }
 
         @unknown default:
@@ -204,17 +214,20 @@ final class PlaybackViewModel: NSObject, ObservableObject {
 
 extension PlaybackViewModel: AVAudioPlayerDelegate {
 
-    /// Called by AVAudioPlayer when playback finishes naturally (numberOfLoops reached).
-    /// For .loop mode this is never called (numberOfLoops = -1).
-    /// For .playOnce this fires when the full file finishes — we use it to reset UI state.
+    /// Belt-and-suspenders: if the timer somehow misses the section end and
+    /// the file plays all the way through, catch it here and loop/stop.
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         guard flag else { return }
         Task { @MainActor in
-            // .playOnce: player finished the file — reset to section start
-            self.player?.currentTime = self.sectionStartTime
-            self.isPlaying = false
-            self.progress = 0
-            self.stopTimer()
+            switch self.currentPlaybackMode {
+            case .loop:
+                player.currentTime = self.sectionStartTime
+                player.play()
+            case .playOnce:
+                self.isPlaying = false
+                self.progress = 0
+                self.stopTimer()
+            }
         }
     }
 
